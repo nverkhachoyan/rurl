@@ -1,20 +1,19 @@
-use crate::actions::Action;
 use crate::components::Component;
-use crate::persistence::ProjectData;
-use crossterm::event::{Event, KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+
+use crossterm::event::{Event, KeyCode, MouseEventKind};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Tabs},
+    widgets::{Block, Paragraph, Tabs},
     Frame,
 };
 pub enum HeaderAction {
     Noop,
     Focused(bool),
-    Render,
     TabChanged(usize),
     CreateProject,
+    DeleteProject(usize),
 }
 
 pub struct ProjectTab {
@@ -47,9 +46,9 @@ impl Header {
 
     pub fn handle_key_event(&mut self, key: KeyCode) -> HeaderAction {
         match key {
-            KeyCode::Char('t') => {
-                if self.projects.is_empty() {
-                    HeaderAction::CreateProject
+            KeyCode::Char('d') => {
+                if !self.projects.is_empty() {
+                    HeaderAction::DeleteProject(self.active_tab)
                 } else {
                     HeaderAction::Noop
                 }
@@ -95,39 +94,17 @@ impl Component for Header {
                         return self.handle_key_event(key_event.code);
                     }
                 }
-                Event::Mouse(mouse_event) => {
-                    match mouse_event.kind {
-                        MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
-                            if let Some(rect) = self.rect {
-                                if self.is_mouse_over(mouse_event, &rect) {
-                                    self.focused = true;
-
-                                    // Check if click was on a tab
-                                    if !self.projects.is_empty() {
-                                        let inner_rect =
-                                            Block::default().borders(Borders::ALL).inner(rect);
-
-                                        if mouse_event.row == inner_rect.y {
-                                            let tab_width = (inner_rect.width as usize - 1)
-                                                / self.projects.len();
-                                            let relative_x =
-                                                (mouse_event.column - inner_rect.x) as usize;
-                                            let clicked_tab = relative_x / tab_width;
-
-                                            if clicked_tab < self.projects.len() {
-                                                self.active_tab = clicked_tab;
-                                                return HeaderAction::TabChanged(clicked_tab);
-                                            }
-                                        }
-                                    }
-
-                                    return HeaderAction::Focused(true);
-                                }
+                Event::Mouse(mouse_event) => match mouse_event.kind {
+                    MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
+                        if let Some(rect) = self.rect {
+                            if self.is_mouse_over(mouse_event, &rect) {
+                                self.focused = true;
+                                return HeaderAction::Focused(true);
                             }
                         }
-                        _ => {}
                     }
-                }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -138,23 +115,26 @@ impl Component for Header {
     fn render(&mut self, frame: &mut Frame, rect: Rect) {
         self.rect = Some(rect);
 
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(if self.focused {
-                Style::default().fg(Color::LightYellow)
-            } else {
-                Style::default().fg(Color::DarkGray)
-            });
+        let block = Block::default().style(Style::default().bg(Color::Rgb(16, 18, 24)));
 
         frame.render_widget(block.clone(), rect);
         let inner_rect = block.inner(rect);
 
         if self.projects.is_empty() {
             let help_text = "Press SPACE + t to create a new project";
-            let paragraph = Paragraph::new(help_text)
-                .style(Style::default().fg(Color::White))
-                .alignment(Alignment::Center);
+            let paragraph = Paragraph::new(Line::from(vec![
+                Span::styled(
+                    " HELP ",
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::LightBlue)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" "),
+                Span::styled(help_text, Style::default().fg(Color::Gray)),
+            ]))
+            .style(Style::default().bg(Color::Rgb(16, 18, 24)))
+            .alignment(Alignment::Center);
             frame.render_widget(paragraph, inner_rect);
         } else {
             let titles: Vec<Line> = self
@@ -162,33 +142,34 @@ impl Component for Header {
                 .iter()
                 .enumerate()
                 .map(|(i, project)| {
-                    let (number_style, name_style) = if i == self.active_tab {
+                    let is_active = i == self.active_tab;
+                    let (number_style, name_style) = if is_active {
                         (
                             Style::default()
-                                .fg(Color::LightYellow)
+                                .fg(Color::Black)
+                                .bg(Color::LightBlue)
                                 .add_modifier(Modifier::BOLD),
                             Style::default()
-                                .fg(Color::LightYellow)
+                                .fg(Color::Black)
+                                .bg(Color::LightBlue)
                                 .add_modifier(Modifier::BOLD),
                         )
                     } else if self.focused {
                         (
-                            Style::default().fg(Color::DarkGray),
+                            Style::default().fg(Color::White),
                             Style::default().fg(Color::White),
                         )
                     } else {
                         (
-                            Style::default().fg(Color::DarkGray),
+                            Style::default().fg(Color::Gray),
                             Style::default().fg(Color::Gray),
                         )
                     };
 
-                    let prefix = if i == self.active_tab { "▸" } else { " " };
                     Line::from(vec![
-                        Span::styled(format!("{}{}", prefix, i + 1), number_style),
-                        Span::raw(" "),
+                        Span::styled(format!(" {} ", i + 1), number_style),
                         Span::styled(
-                            if i == self.active_tab {
+                            if is_active {
                                 format!("{} ", project.name)
                             } else {
                                 format!("{}  ", project.name)
@@ -201,14 +182,15 @@ impl Component for Header {
 
             let tabs = Tabs::new(titles)
                 .block(Block::default())
-                .style(Style::default().fg(Color::White))
+                .style(Style::default().bg(Color::Rgb(16, 18, 24)))
                 .highlight_style(
                     Style::default()
-                        .fg(Color::LightYellow)
+                        .fg(Color::Black)
+                        .bg(Color::LightBlue)
                         .add_modifier(Modifier::BOLD),
                 )
                 .select(self.active_tab)
-                .divider("|");
+                .divider(" ");
 
             frame.render_widget(tabs, inner_rect);
         }

@@ -1,27 +1,24 @@
-use crossterm::event::MouseEvent;
 use ratatui::{
     layout::{Constraint, Direction, Layout as TuiLayout, Rect},
     Frame,
 };
 
-use crate::actions::Action;
 use crate::components::Component;
 
 pub enum LayoutAction {
     Noop,
-    Render,
 }
 
-pub struct Layout {
-    header_height: u16,
-    footer_height: u16,
-    sidebar_width: u16,
+pub struct AppLayout {
+    pub header_height: u16,
+    pub footer_height: u16,
+    pub sidebar_width: u16,
 }
 
-impl Layout {
+impl AppLayout {
     pub fn new() -> Self {
         Self {
-            header_height: 3,
+            header_height: 1,
             footer_height: 3,
             sidebar_width: 30,
         }
@@ -51,7 +48,7 @@ impl Layout {
     }
 }
 
-impl Component for Layout {
+impl Component for AppLayout {
     type Action = LayoutAction;
 
     fn tick(&mut self, _: Option<&crossterm::event::Event>, _: u32) -> LayoutAction {
