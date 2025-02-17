@@ -1,26 +1,14 @@
-use crate::actions::Action;
-use ratatui::{
-    crossterm::event::{Event, KeyEvent, MouseEvent},
-    layout::Rect,
-    Frame,
-};
+use crossterm::event::{Event, MouseEvent};
+use ratatui::prelude::*;
 
 pub trait Component {
-    fn handle_event(&mut self, event: Option<&Event>) -> Action {
-        match event {
-            Some(Event::Key(key_event)) => self.handle_key_event(*key_event),
-            Some(Event::Mouse(mouse_event)) => self.handle_mouse_event(*mouse_event),
-            // Some(Event::Resize(x, y)) => Action::Resize(*x, *y),
-            Some(_) => Action::Noop,
-            None => Action::Noop,
-        }
+    type Action;
+
+    fn tick(&mut self, event: Option<&Event>, tick_count: u32) -> Self::Action;
+    fn render(&mut self, frame: &mut Frame, rect: Rect);
+    fn focus(&mut self, focused: bool);
+    fn is_mouse_over(&self, mouse_event: &MouseEvent, rect: &Rect) -> bool {
+        let (x, y) = (mouse_event.column, mouse_event.row);
+        x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
     }
-    fn handle_key_event(&mut self, _: KeyEvent) -> Action {
-        Action::Noop
-    }
-    fn handle_mouse_event(&mut self, _: MouseEvent) -> Action {
-        Action::Noop
-    }
-    fn render(&mut self, f: &mut Frame, rect: Rect);
-    fn focus(&mut self, _: bool) {}
 }

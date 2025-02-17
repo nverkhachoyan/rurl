@@ -1,3 +1,4 @@
+use crossterm::event::MouseEvent;
 use ratatui::{
     layout::{Constraint, Direction, Layout as TuiLayout, Rect},
     Frame,
@@ -5,6 +6,11 @@ use ratatui::{
 
 use crate::actions::Action;
 use crate::components::Component;
+
+pub enum LayoutAction {
+    Noop,
+    Render,
+}
 
 pub struct Layout {
     header_height: u16,
@@ -46,13 +52,16 @@ impl Layout {
 }
 
 impl Component for Layout {
-    fn handle_event(&mut self, _event: Option<&crossterm::event::Event>) -> Action {
-        Action::Noop
+    type Action = LayoutAction;
+
+    fn tick(&mut self, _: Option<&crossterm::event::Event>, _: u32) -> LayoutAction {
+        LayoutAction::Noop
     }
 
     fn render(&mut self, _: &mut Frame, rect: Rect) {
         let _ = self.get_layout_areas(rect);
-        // The actual rendering will be done by the App, which will use these areas
-        // to position other components
+        // Implemented in the App struct
     }
+
+    fn focus(&mut self, _: bool) {}
 }

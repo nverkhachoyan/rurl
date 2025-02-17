@@ -1,28 +1,34 @@
+use crossterm::event;
+use std::{error::Error, time::Duration};
+
 mod actions;
-mod components;
-
-use actions::Action;
-use crossterm::event::{self};
-use std::error::Error;
-
 mod app;
+mod components;
+mod persistence;
 mod tui;
-use app::App;
+
+use app::{App, AppAction};
+use persistence::Storage;
 use tui::Tui;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut tui = Tui::new()?;
-    let mut app = App::new();
+    let storage = Storage::new();
+    let mut app = App::new(storage);
 
     loop {
-        tui.terminal.draw(|f| app.render(f))?;
-        let event = event::read()?;
-        let action = app.handle_event(&event);
-        let mut frame = tui.terminal.get_frame();
-        match action {
-            Action::Quit => break,
-            Action::Render => app.render(&mut frame),
-            _ => {}
+        if app.should_render() {
+            tui.terminal.draw(|f| app.render(f))?;
+        }
+
+        if event::poll(Duration::from_millis(250))? {
+            let event = event::read()?;
+            let action = app.tick(Some(&event));
+            if let AppAction::Quit = action {
+                break;
+            }
+        } else {
+            app.tick(None);
         }
     }
 
