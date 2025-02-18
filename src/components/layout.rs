@@ -3,7 +3,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::components::Component;
+use crate::{components::Component, theme::Theme};
 
 pub enum LayoutAction {
     Noop,
@@ -55,10 +55,5 @@ impl Component for AppLayout {
         LayoutAction::Noop
     }
 
-    fn render(&mut self, _: &mut Frame, rect: Rect) {
-        let _ = self.get_layout_areas(rect);
-        // Implemented in the App struct
-    }
-
-    fn focus(&mut self, _: bool) {}
+    fn render(&mut self, _: &mut Frame, _: Rect, _: &Theme) {}
 }

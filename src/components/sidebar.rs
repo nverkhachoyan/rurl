@@ -1,9 +1,10 @@
 use crate::components::Component;
 use crate::persistence::{ProjectUpdate, RequestData};
+use crate::theme::*;
 use crossterm::event::{Event, KeyCode, MouseEventKind};
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, List, ListItem},
     Frame,
@@ -11,14 +12,12 @@ use ratatui::{
 
 pub enum SidebarAction {
     Noop,
-    Focused(bool),
     Selected(RequestData),
     ProjectUpdate(ProjectUpdate),
-    ShowModal,
+    EditRequest,
 }
 
 pub struct Sidebar {
-    focused: bool,
     rect: Option<Rect>,
     requests: Vec<RequestData>,
     selected_index: Option<usize>,
@@ -27,7 +26,6 @@ pub struct Sidebar {
 impl Sidebar {
     pub fn new() -> Self {
         Sidebar {
-            focused: false,
             rect: None,
             requests: vec![],
             selected_index: None,
@@ -41,11 +39,6 @@ impl Sidebar {
         } else {
             self.selected_index = Some(0);
         }
-    }
-
-    pub fn clear_requests(&mut self) {
-        self.requests.clear();
-        self.selected_index = None;
     }
 
     fn handle_selection(&mut self, key: KeyCode) -> Option<SidebarAction> {
@@ -76,10 +69,10 @@ impl Sidebar {
                     None
                 }
             }
+            KeyCode::Char('e') => Some(SidebarAction::EditRequest),
             KeyCode::Enter => self
                 .selected_index
                 .map(|i| SidebarAction::Selected(self.requests[i].clone())),
-            KeyCode::Char('a') => Some(SidebarAction::ShowModal),
             KeyCode::Char('d') => self
                 .selected_index
                 .map(|i| SidebarAction::ProjectUpdate(ProjectUpdate::DeleteRequest(i))),
@@ -95,22 +88,14 @@ impl Component for Sidebar {
         if let Some(event) = event {
             match event {
                 Event::Key(key_event) => {
-                    if self.focused {
-                        if let Some(action) = self.handle_selection(key_event.code) {
-                            return action;
-                        }
+                    if let Some(action) = self.handle_selection(key_event.code) {
+                        return action;
                     }
                 }
                 Event::Mouse(mouse_event) => match mouse_event.kind {
                     MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
                         if let Some(rect) = self.rect {
                             if self.is_mouse_over(mouse_event, &rect) {
-                                self.focused = true;
-
-                                if mouse_event.row <= rect.y {
-                                    return SidebarAction::Focused(true);
-                                }
-
                                 let relative_y = mouse_event.row.saturating_sub(rect.y + 1); // +1 for border
                                 if (relative_y as usize) < self.requests.len() {
                                     self.selected_index = Some(relative_y as usize);
@@ -118,8 +103,6 @@ impl Component for Sidebar {
                                         self.requests[relative_y as usize].clone(),
                                     );
                                 }
-
-                                return SidebarAction::Focused(true);
                             }
                         }
                     }
@@ -132,7 +115,7 @@ impl Component for Sidebar {
         SidebarAction::Noop
     }
 
-    fn render(&mut self, frame: &mut Frame, rect: Rect) {
+    fn render(&mut self, frame: &mut Frame, rect: Rect, theme: &Theme) {
         self.rect = Some(rect);
 
         let items: Vec<ListItem> = self
@@ -140,75 +123,73 @@ impl Component for Sidebar {
             .iter()
             .enumerate()
             .map(|(i, request)| {
-                let (method_style, name_style) = if Some(i) == self.selected_index {
-                    (
-                        Style::default()
-                            .fg(Color::White)
-                            .add_modifier(Modifier::BOLD),
-                        Style::default()
-                            .fg(Color::White)
-                            .add_modifier(Modifier::BOLD),
-                    )
+                let is_selected = Some(i) == self.selected_index;
+                let method_style = if let Some(method) = &request.method {
+                    match method.as_str() {
+                        "GET" => Style::default().fg(theme.http_methods.get),
+                        "POST" => Style::default().fg(theme.http_methods.post),
+                        "PUT" => Style::default().fg(theme.http_methods.put),
+                        "DELETE" => Style::default().fg(theme.http_methods.delete),
+                        "PATCH" => Style::default().fg(theme.http_methods.patch),
+                        "HEAD" => Style::default().fg(theme.http_methods.head),
+                        _ => Style::default().fg(theme.http_methods.default),
+                    }
                 } else {
-                    (
-                        if let Some(method) = &request.method {
-                            match method.as_str() {
-                                "GET" => Style::default().fg(Color::Green),
-                                "POST" => Style::default().fg(Color::Blue),
-                                "PUT" => Style::default().fg(Color::Yellow),
-                                "DELETE" => Style::default().fg(Color::Red),
-                                _ => Style::default().fg(Color::Gray),
-                            }
+                    Style::default().fg(theme.http_methods.default)
+                }
+                .add_modifier(Modifier::BOLD)
+                .bg(if is_selected {
+                    theme.sidebar.selected_bg
+                } else {
+                    theme.sidebar.bg
+                });
+
+                let name_style =
+                    Style::default()
+                        .fg(theme.sidebar.text_unfocused)
+                        .bg(if is_selected {
+                            theme.sidebar.selected_bg
                         } else {
-                            Style::default().fg(Color::Gray)
-                        }
-                        .add_modifier(Modifier::BOLD),
-                        Style::default().fg(Color::Gray),
-                    )
-                };
+                            theme.sidebar.bg
+                        });
 
                 let method = format!(" {} ", request.method.clone().unwrap_or("".to_string()));
-                let name = format!(" {}", request.url.clone().unwrap_or("".to_string()));
+                let name = format!(" {}", request.name.clone());
 
                 ListItem::new(Line::from(vec![
-                    if Some(i) == self.selected_index {
-                        Span::styled("→ ", Style::default().fg(Color::White))
-                    } else {
-                        Span::styled("  ", Style::default())
-                    },
+                    Span::styled(
+                        if is_selected { "→ " } else { "  " },
+                        Style::default().bg(if is_selected {
+                            theme.sidebar.selected_bg
+                        } else {
+                            theme.sidebar.bg
+                        }),
+                    ),
                     Span::styled(method, method_style),
                     Span::raw(" "),
                     Span::styled(name, name_style),
                 ]))
+                .style(Style::default().bg(if is_selected {
+                    theme.sidebar.selected_bg
+                } else {
+                    theme.sidebar.bg
+                }))
             })
             .collect();
 
         let list = List::new(items)
             .block(
                 Block::default()
-                    .style(Style::default().bg(Color::Rgb(20, 20, 20)))
+                    .style(Style::default().bg(theme.sidebar.bg))
                     .title(Span::styled(
-                        if self.focused {
-                            " ⦿ Requests "
-                        } else {
-                            " ○ Requests "
-                        },
+                        " ⦿ Requests ",
                         Style::default()
-                            .fg(if self.focused {
-                                Color::LightBlue
-                            } else {
-                                Color::Gray
-                            })
+                            .fg(theme.sidebar.title_focused)
                             .add_modifier(Modifier::BOLD),
                     )),
             )
-            .highlight_style(Style::default().add_modifier(Modifier::BOLD))
-            .style(Style::default().bg(Color::Rgb(20, 20, 20)));
+            .style(Style::default().bg(theme.sidebar.bg));
 
         frame.render_widget(list, rect);
-    }
-
-    fn focus(&mut self, focused: bool) {
-        self.focused = focused;
     }
 }
